@@ -23,5 +23,7 @@
 #define smp_mb()			arch_smp_mb()
 #define smp_rmb()			arch_smp_rmb()
 #define smp_wmb()			arch_smp_wmb()
+#define dma_rmb()			arch_dma_rmb()
+#define dma_wmb()			arch_dma_wmb()
 
 #endif /* _LINUX_INIT_H_ */

@@ -45,6 +45,12 @@
 /* SMP Write Memory barrier */
 #define arch_smp_wmb()			dmb(ishst)
 
+/* DMA Read Memory barrier */
+#define arch_dma_rmb()			dmb(oshld)
+
+/* DMA Write Memory barrier */
+#define arch_dma_wmb()			dmb(oshst)
+
 /* CPU relax for busy loop */
 #define arch_cpu_relax()		asm volatile ("" : : : "memory")
 
