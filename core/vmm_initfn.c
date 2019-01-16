@@ -22,6 +22,8 @@
  */
 
 #include <vmm_error.h>
+#include <vmm_stdio.h>
+#include <vmm_smp.h>
 #include <vmm_initfn.h>
 
 static void __init initfn_nidtbl_found(struct vmm_devtree_node *node,
