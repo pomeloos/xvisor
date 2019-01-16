@@ -94,8 +94,9 @@ static char const* const _log_prefixes[] = {
 
 struct vmm_stdio_ctrl {
 	atomic_t loglevel;
-        vmm_spinlock_t lock;
-        struct vmm_chardev *dev;
+	vmm_spinlock_t lock;
+	vmm_spinlock_t logbuf_lock;
+	struct vmm_chardev *dev;
 };
 
 static struct vmm_stdio_ctrl stdio_ctrl;
@@ -474,7 +475,15 @@ int vmm_snprintf(char *out, u32 out_sz, const char *format, ...)
 static int vmm_cvprintf(struct vmm_chardev *cdev,
 			const char *format, va_list args)
 {
-	return print(NULL, NULL, (cdev) ? cdev : stdio_ctrl.dev, format, args);
+	int rc;
+
+	if(stdio_ctrl.dev)
+		vmm_spin_lock(&stdio_ctrl.logbuf_lock);
+	rc = print(NULL, NULL, (cdev) ? cdev : stdio_ctrl.dev, format, args);
+	if(stdio_ctrl.dev)
+		vmm_spin_unlock(&stdio_ctrl.logbuf_lock);
+
+	return rc;
 }
 
 int vmm_cprintf(struct vmm_chardev *cdev, const char *format, ...)
@@ -875,6 +884,7 @@ int __init vmm_stdio_init(void)
 
 	/* Initialize lock */
 	INIT_SPIN_LOCK(&stdio_ctrl.lock);
+	INIT_SPIN_LOCK(&stdio_ctrl.logbuf_lock);
 
 	/* Set current device to NULL */
 	stdio_ctrl.dev = NULL;
