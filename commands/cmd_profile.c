@@ -351,7 +351,7 @@ static int cmd_profile_exec(struct vmm_chardev *cdev, int argc, char **argv)
 	char *param = NULL;
 	int index = 0;
 
-	if (argc > 3) {
+	if (argc > 3 || argc < 2) {
 		goto fail;
 	}
 
