@@ -36,6 +36,8 @@
 
 #define GICD_CTRL			0x000
 #define GICD_CTR			0x004
+#define GICD_IIDR			0x008
+#define GICD_IGROUP			0x080
 #define GICD_ENABLE_SET			0x100
 #define GICD_ENABLE_CLEAR		0x180
 #define GICD_PENDING_SET		0x200
@@ -46,6 +48,8 @@
 #define GICD_TARGET			0x800
 #define GICD_CONFIG			0xc00
 #define GICD_SOFTINT			0xf00
+#define GICD_SGI_PENDING_CLEAR	0xf10
+#define GICD_SGI_PENDING_SET	0xf20
 
 #define GICH_HCR			0x0
 #define GICH_VTR			0x4

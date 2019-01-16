@@ -76,6 +76,9 @@ struct gic_chip_data {
 static int gic_cnt = 0;
 static struct gic_chip_data gic_data[GIC_MAX_NR];
 
+#define NR_GIC_CPU_IF 8
+static unsigned char gic_cpu_map[NR_GIC_CPU_IF];
+
 #define gic_write(val, addr)	vmm_writel_relaxed((val), (void *)(addr))
 #define gic_read(addr)		vmm_readl_relaxed((void *)(addr))
 
@@ -176,7 +179,12 @@ static int gic_set_type(struct vmm_host_irq *d, u32 type)
 static void gic_raise(struct vmm_host_irq *d,
 		      const struct vmm_cpumask *mask)
 {
-	unsigned long map = *vmm_cpumask_bits(mask);
+	unsigned long map = 0;
+	int cpu;
+
+	/* Convert our logical CPU mask into a physical one. */
+	for_each_cpu(cpu, mask)
+		map |= gic_cpu_map[cpu];
 
 	/*
 	 * Ensure that stores to Normal memory are visible to the
@@ -195,16 +203,22 @@ static int gic_set_affinity(struct vmm_host_irq *d,
 {
 	virtual_addr_t reg;
 	u32 shift = (d->hwirq % 4) * 8;
-	u32 cpu = vmm_cpumask_first(mask_val);
+	u32 cpu;
 	u32 val, mask, bit;
 	struct gic_chip_data *gic = vmm_host_irq_get_chip_data(d);
 
-	if (cpu >= 8)
+	if (!force)
+		cpu = vmm_cpumask_any_and(mask_val, cpu_online_mask);
+	else
+		cpu = vmm_cpumask_first(mask_val);
+
+
+	if (cpu >= NR_GIC_CPU_IF)
 		return VMM_EINVALID;
 
 	reg = gic->dist_base + GICD_TARGET + (d->hwirq & ~3);
 	mask = 0xff << shift;
-	bit = 1 << (cpu + shift);
+	bit = gic_cpu_map[cpu] << shift;
 
 	val = gic_read(reg) & ~mask;
 	gic_write(val | bit, reg);
@@ -290,13 +304,33 @@ static void __init gic_cascade_irq(u32 gic_nr, u32 irq)
 	}
 }
 
+static u8 gic_get_cpumask(struct gic_chip_data *gic)
+{
+	virtual_addr_t base = gic->dist_base;
+	u32 mask, i;
+
+	for (i = mask = 0; i < 32; i += 4) {
+		mask = gic_read(base + GICD_TARGET + i);
+		mask |= mask >> 16;
+		mask |= mask >> 8;
+		if (mask)
+			break;
+	}
+
+	if (!mask && vmm_num_possible_cpus() > 1)
+		vmm_lcritical("GIC", "GIC CPU mask not found - kernel will fail to boot.\n");
+
+	return mask;
+}
+
 static void __init gic_dist_init(struct gic_chip_data *gic)
 {
 	int hirq;
 	unsigned int i;
-	u32 cpumask = 1 << vmm_smp_processor_id();
+	u32 cpumask;
 	virtual_addr_t base = gic->dist_base;
 
+	cpumask = gic_get_cpumask(gic);
 	cpumask |= cpumask << 8;
 	cpumask |= cpumask << 16;
 
@@ -363,6 +397,26 @@ static void __init gic_dist_init(struct gic_chip_data *gic)
 static void __cpuinit gic_cpu_init(struct gic_chip_data *gic)
 {
 	int i;
+	unsigned int cpu_mask, cpu = vmm_smp_processor_id();
+
+	if (gic == &gic_data[0]) {
+		/*
+		 * Get what the GIC says our CPU mask is.
+		 */
+		if (WARN_ON(cpu >= NR_GIC_CPU_IF))
+			return;
+
+		cpu_mask = gic_get_cpumask(gic);
+		gic_cpu_map[cpu] = cpu_mask;
+
+		/*
+		 * Clear our mask from the other map entries in case they're
+		 * still undefined.
+		 */
+		for (i = 0; i < NR_GIC_CPU_IF; i++)
+			if (i != cpu)
+				gic_cpu_map[i] &= ~cpu_mask;
+	}
 
 	/*
 	 * Deal with the banked PPI and SGI interrupts - disable all
@@ -421,11 +475,22 @@ static int __init gic_init_bases(struct vmm_devtree_node *node,
 				 virtual_addr_t dist_base)
 {
 	u32 max_irqs;
+	int i;
 	struct gic_chip_data *gic;
 
 	BUG_ON(gic_nr >= GIC_MAX_NR);
 
 	gic = &gic_data[gic_nr];
+
+	if (gic == &gic_data[0]) {
+		/*
+		 * Initialize the CPU interface map to all CPUs.
+		 * It will be refined as each CPU probes its ID.
+		 * This is only necessary for the primary GIC.
+		 */
+		for (i = 0; i < NR_GIC_CPU_IF; i++)
+			gic_cpu_map[i] = 0xff;
+	}
 
 	gic->eoimode = eoimode;
 	/* For primary GICs, skip over SGIs.
