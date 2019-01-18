@@ -25,3 +25,4 @@
 board-dtbs-$(CONFIG_ARMV7A_VE)+=dts/allwinner/sun7i-a20-cubieboard2.dtb
 board-dtbs-$(CONFIG_ARMV7A)+=dts/allwinner/sun4i-a10-cubieboard.dtb
 board-dtbs-$(CONFIG_ARMV7A)+=dts/allwinner/sun4i-a10-hackberry.dtb
+board-dtbs-$(CONFIG_ARMV8)+=dts/allwinner/sun50i-h5-orangepi-pc2.dtb
